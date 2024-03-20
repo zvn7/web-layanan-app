@@ -1,0 +1,145 @@
+<?php
+
+namespace App\Controllers;
+use CodeIgniter\RESTful\ResourceController;
+use App\Models\UsersModel;
+
+class Users extends ResourceController
+{
+    protected $helpers = ['custom_helpers'];
+    function __construct()
+    {
+        $this->users = new UsersModel();
+    }
+
+    public function index()
+    {
+        $data['users'] = $this->users->findAll();
+        return view('users/index', $data);
+    }
+
+    public function show($id = null)
+    {
+        //
+    }
+
+    public function new()
+    {
+        return view('users/new');
+    }
+
+    public function create()
+    {
+        if (!$this->validate([
+            'fullname' => [
+                'rules' => 'required|is_unique[developer.fullname]',
+                'errors' => [
+                    'required' => 'Nama developer harus diisi.',
+                    'is_unique' => 'Nama developer sudah tersedia.'
+                ],
+                'foto' => [
+                    'rules' => 'max_size[foto,1024]|is_image[foto]|mime_in[foto,image/jpg,image/jpeg,image/png]',
+                    'errors' => [
+                        'max_size' => 'Ukuran foto terlalu besar',
+                        'is_image' => 'Yang anda pilih bukan foto',
+                        'mime_in' => 'Yang anda pilih bukan foto'
+                    ]
+                ]
+            ]
+        ])) {
+            return redirect()->back()->withInput();
+        }
+        // ambil foto
+        $fileFoto = $this->request->getFile('foto');
+        // cek apakah tidak ada foto yang diupload
+        if ($fileFoto->getError() == 4) {
+            $namaFoto = 'user.png';
+        } else {
+            // generate nama foto random
+            $namaFoto = $fileFoto->getRandomName();
+            // pindahkan  file ke folder img
+            $fileFoto->move('img', $namaFoto);
+        }
+
+        $this->model->save([
+            'username' => $this->request->getVar('username'),
+            'email' => $this->request->getVar('email'),
+            'fullname' => $this->request->getVar('fullname'),
+            'nip' => $this->request->getVar('nip'),
+            'gender' => $this->request->getVar('gender'),
+            'password' => password_hash(base64_encode(hash('sha384', true)), PASSWORD_DEFAULT),
+            'foto' => $namaFoto,
+            'note' => $this->request->getVar('note'),
+        ]);
+        return redirect()->to(site_url('users'))->with('success', 'Data Berhasil Ditambahkan');
+    }
+
+    public function edit($id = null)
+    {
+        $users = $this->model->where('id_user', $id)->first();
+        if (is_object($users)) {
+            $data['users'] = $users;
+            return view('users/edit', $data);
+        } else {
+            throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound();
+        }
+    }
+
+    public function update($id = null)
+    {
+        $data = $this->request->getPost();
+
+        $this->model->update($id, $data);
+        return redirect()->to(site_url('users'))->with('success', 'Data Berhasil Diupdate');
+    }
+
+    public function remove($id = null)
+    {
+        //
+    }
+
+    public function delete($id = null)
+    {
+        $this->model->where('id_user', $id)->delete();
+        // $this->model->delete($id);
+        return redirect()->to(site_url('users'))->with('success', 'Data Berhasil Dihapus');
+    }
+
+    public function trash()
+    {
+        $data['users'] = $this->model->onlyDeleted()->findAll();
+        return view('users/trash', $data);
+    }
+
+    public function restore($id = null)
+    {
+        $this->db      = \Config\Database::connect();
+        
+        if ($id != null) {
+            $this->db->table('users')
+                ->set('deleted_at', null, true)
+                ->where(['id_user' => $id])
+                ->update();
+        } else {
+            $this->db->table('users')
+                ->set('deleted_at', null, true)
+                ->where(['deleted_at is NOT NULL', NULL, FALSE])
+                ->update();
+        }
+        if ($this->db->affectedRows() > 0) {
+            return redirect()->to(site_url('users'))->with('success', 'Data Berhasil Direstore');
+        }
+    }
+
+    public function delete2($id = null)
+    {
+        if ($id != null) {
+            $this->model->delete($id, true);
+            return redirect()->to(site_url('users/trash'))->with('success', 'Data Berhasil Dihapus Permanen');
+        }else{
+            $this->model->purgeDeleted();
+            return redirect()->to(site_url('users/trash'))->with('success', 'Data Trash Berhasil Dihapus Permanen');
+        }
+        
+    }
+}
